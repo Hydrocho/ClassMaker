@@ -3,709 +3,948 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>선생님을 위한 스마트 학급 편성</title>
-    <!-- Tailwind CSS -->
+    <title>학급 편성 도우미 Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome -->
+    <!-- SheetJS for Excel Export & Import -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body {
-            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
-            background-color: #f3f4f6;
+        body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background-color: #f8fafc; }
+        .student-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 10px; margin: 3px; border-radius: 999px;
+            font-size: 0.85rem; border: 1px solid transparent;
+            cursor: pointer; transition: transform 0.1s;
         }
-        .input-card {
-            transition: all 0.2s;
+        .student-chip:hover { transform: scale(1.05); z-index: 5; }
+        .chip-male { background-color: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+        .chip-female { background-color: #fce7f3; color: #be185d; border-color: #fbcfe8; }
+        .fixed-pin { color: #dc2626; font-size: 0.7rem; }
+        .move-badge { 
+            background-color: #ef4444; color: white; 
+            font-size: 0.65rem; padding: 1px 4px; border-radius: 4px; 
+            font-weight: bold; margin-right: 4px;
         }
-        .input-card:focus-within {
-            border-color: #3b82f6;
-            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1), 0 2px 4px -1px rgba(59, 130, 246, 0.06);
-        }
-        .class-card {
-            min-height: 150px;
-            transition: all 0.3s;
-        }
-        .class-card:hover {
-            transform: translateY(-2px);
-        }
-        .student-tag {
-            display: inline-block;
-            padding: 4px 10px;
-            margin: 3px;
-            border-radius: 9999px;
-            font-size: 0.9rem;
-            background-color: #e0f2fe;
-            color: #0369a1;
-            border: 1px solid #bae6fd;
-            cursor: pointer;
-            transition: all 0.2s;
-            user-select: none;
-        }
-        .student-tag:hover {
-            background-color: #bae6fd;
-            transform: scale(1.05);
-        }
-        /* Highlight Styles */
-        .highlight-self {
-            background-color: #fde047 !important; /* Yellow */
-            border-color: #eab308 !important;
-            color: #854d0e !important;
-            font-weight: bold;
-            transform: scale(1.15);
-            box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
-            z-index: 10;
-        }
-        .highlight-friend {
-            background-color: #86efac !important; /* Green */
-            border-color: #22c55e !important;
-            color: #14532d !important;
-            font-weight: bold;
-            transform: scale(1.1);
-        }
-        .highlight-enemy {
-            background-color: #fca5a5 !important; /* Red */
-            border-color: #ef4444 !important;
-            color: #7f1d1d !important;
-            font-weight: bold;
-            box-shadow: 0 0 5px rgba(239, 68, 68, 0.3);
-        }
-        .dimmed {
-            opacity: 0.25;
-            filter: grayscale(100%);
-        }
-        
-        /* Scrollbar */
         textarea::-webkit-scrollbar { width: 8px; }
         textarea::-webkit-scrollbar-track { background: #f1f1f1; }
         textarea::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        textarea::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        /* Report Toggle Animation */
-        #reportDetails {
-            transition: max-height 0.3s ease-out;
-            max-height: 0;
-            overflow: hidden;
-        }
-        #reportDetails.open {
-            max-height: 500px; /* Adjust based on content approximation */
-            overflow-y: auto;
-        }
+        .highlight-target { ring: 2px solid #eab308; transform: scale(1.1); z-index: 10; font-weight: bold; }
+        .highlight-friend { ring: 2px solid #22c55e; transform: scale(1.05); }
+        .highlight-enemy { ring: 2px solid #ef4444; opacity: 0.8; }
+        .dimmed { opacity: 0.3; filter: grayscale(100%); }
     </style>
 </head>
-<body class="p-4 md:p-8 text-slate-800">
+<body class="text-slate-800 h-screen flex flex-col overflow-hidden">
 
-    <div class="max-w-7xl mx-auto">
-        <!-- Header -->
-        <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-slate-800 mb-2">🏫 스마트 학급 편성 도구</h1>
-            <p class="text-slate-600">엑셀 데이터를 붙여넣어 조건에 맞는 최적의 반 편성을 도와드립니다.</p>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            <!-- Left Panel: Inputs -->
-            <div class="lg:col-span-4 space-y-4">
-                
-                <!-- Settings -->
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">
-                        <i class="fas fa-layer-group mr-1 text-blue-500"></i> 생성할 학급 수
-                    </label>
-                    <input type="number" id="classCount" value="10" min="2" max="50" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="예: 10">
-                </div>
-
-                <!-- Input 1: Must be together -->
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 input-card">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block font-bold text-green-700">
-                            <i class="fas fa-users mr-1"></i> 꼭 같은 반 (단짝)
-                        </label>
-                        <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">한 줄에 한 팀</span>
-                    </div>
-                    <textarea id="inputTogether" class="w-full h-32 p-3 text-sm border border-slate-300 rounded-lg focus:outline-none resize-none" placeholder="예시:&#13;&#10;김철수, 이훈이, 맹구&#13;&#10;유리, 수지"></textarea>
-                    <p class="text-xs text-slate-500 mt-1">* 콤마(,)나 탭(엑셀 붙여넣기)으로 이름 구분</p>
-                </div>
-
-                <!-- Input 2: Must be separate (All differnt) -->
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 input-card">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block font-bold text-red-600">
-                            <i class="fas fa-bomb mr-1"></i> 절대 다른 반 (모두 흩어짐)
-                        </label>
-                        <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">한 줄 내 전원 분리</span>
-                    </div>
-                    <textarea id="inputSeparateAll" class="w-full h-32 p-3 text-sm border border-slate-300 rounded-lg focus:outline-none resize-none" placeholder="예시:&#13;&#10;철수, 영희, 민수&#13;&#10;A학생, B학생"></textarea>
-                    <p class="text-xs text-slate-500 mt-1">* 입력된 줄의 학생들은 서로 절대 같은 반이 되지 않습니다.</p>
-                </div>
-
-                <!-- Input 3: Must be separate (One vs List) -->
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 input-card">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block font-bold text-orange-600">
-                            <i class="fas fa-shield-alt mr-1"></i> 특정 학생 피하기
-                        </label>
-                        <span class="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">A // B, C, D</span>
-                    </div>
-                    <textarea id="inputSeparateTarget" class="w-full h-32 p-3 text-sm border border-slate-300 rounded-lg focus:outline-none resize-none" placeholder="예시:&#13;&#10;김철수 // 이영희, 박민수&#13;&#10;A // B, C, D"></textarea>
-                    <p class="text-xs text-slate-500 mt-1">* '철수'는 뒤의 학생들과 분리됩니다.<br>* '영희'와 '민수' 끼리도 가급적 분리됩니다.</p>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="flex gap-2">
-                    <button onclick="runAssignment()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition duration-200 flex items-center justify-center">
-                        <i class="fas fa-magic mr-2"></i> 반 편성 실행 (랜덤)
-                    </button>
-                    <button onclick="clearInputs()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-4 rounded-xl transition duration-200">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-                
-                <!-- Error/Status Message -->
-                <div id="statusMessage" class="hidden p-3 rounded-lg text-sm font-medium"></div>
-
+    <!-- Top Nav -->
+    <nav class="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap justify-between items-center shadow-sm z-10 gap-2">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0">
+                <i class="fas fa-file-excel"></i>
+            </div>
+            <h1 class="text-lg md:text-xl font-bold bg-gradient-to-r from-indigo-700 to-purple-600 bg-clip-text text-transparent whitespace-nowrap">
+                학급 편성 도우미 Pro
+            </h1>
+        </div>
+        
+        <div class="flex items-center gap-2 md:gap-4 overflow-x-auto no-scrollbar">
+            <!-- Class Count -->
+            <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                <span class="text-xs font-bold text-slate-500">학급수</span>
+                <input type="number" id="classCount" value="10" min="2" max="20" class="w-8 bg-transparent text-center font-bold text-indigo-700 focus:outline-none border-b border-slate-300">
             </div>
 
-            <!-- Right Panel: Results -->
-            <div class="lg:col-span-8 flex flex-col h-full space-y-4">
-                
-                <!-- Result Header & Search -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div class="flex items-center gap-4 w-full md:w-auto">
-                        <h2 class="text-xl font-bold text-slate-800 flex items-center shrink-0">
-                            📋 편성 결과
-                            <span id="resultCountBadge" class="hidden ml-2 bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded-full">0명</span>
-                        </h2>
-                        <button onclick="copyResults()" class="whitespace-nowrap bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-lg text-sm font-bold transition flex items-center">
-                            <i class="fas fa-copy mr-1"></i> 결과 복사
-                        </button>
-                    </div>
-                    
-                    <div class="relative w-full md:w-72">
-                        <input type="text" id="studentSearch" onkeyup="searchStudent()" placeholder="학생 이름 검색..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                        <i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i>
-                    </div>
+            <!-- Size Limit -->
+            <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0">
+                <span class="text-xs font-bold text-slate-500">인원</span>
+                <div class="flex items-center gap-1">
+                    <input type="number" id="minPerClass" value="31" min="1" max="50" class="w-8 bg-transparent text-center font-bold text-slate-700 focus:outline-none border-b border-slate-300 placeholder-slate-300">
+                    <span class="text-slate-400">~</span>
+                    <input type="number" id="maxPerClass" value="32" min="1" max="50" class="w-8 bg-transparent text-center font-bold text-red-600 focus:outline-none border-b border-red-200 placeholder-slate-300">
                 </div>
+            </div>
 
-                <!-- Verification Report Section -->
-                <div id="verificationSection" class="hidden bg-white rounded-2xl shadow-sm border border-green-200 p-4">
-                    <div class="flex justify-between items-center cursor-pointer" onclick="toggleReport()">
-                        <div class="flex items-center gap-2">
-                            <div class="bg-green-100 text-green-700 w-8 h-8 rounded-full flex items-center justify-center">
-                                <i class="fas fa-check"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-green-800 text-sm">자동 검증 완료</h3>
-                                <p id="verificationSummary" class="text-xs text-green-600">모든 조건이 만족되었습니다.</p>
-                            </div>
-                        </div>
-                        <i id="reportToggleIcon" class="fas fa-chevron-down text-green-600 transition-transform"></i>
-                    </div>
-                    <div id="reportDetails" class="mt-2 text-sm text-slate-600 bg-slate-50 rounded-lg p-2 border border-slate-100">
-                        <!-- Verification logs go here -->
-                    </div>
-                </div>
+            <!-- Score Tolerance -->
+            <div class="flex items-center gap-2 bg-yellow-50 px-3 py-1.5 rounded-lg border border-yellow-200 shrink-0" title="반 평균 점수의 격차가 이 값 이내라면 원래 반을 유지합니다.">
+                <span class="text-xs font-bold text-yellow-700">평균격차허용</span>
+                <input type="number" id="scoreTolerance" value="50" step="0.5" min="0" max="100" class="w-10 bg-transparent text-center font-bold text-yellow-800 focus:outline-none border-b border-yellow-400">
+                <span class="text-xs text-yellow-600">점</span>
+            </div>
 
-                <!-- Results Grid -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex-grow min-h-[500px]">
-                    <div id="resultGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-min">
-                        <div class="col-span-full text-center py-20 text-slate-400">
-                            <i class="fas fa-chalkboard text-4xl mb-4"></i>
-                            <p>왼쪽의 데이터를 입력하고 [반 편성 실행]을 눌러주세요.<br>실행할 때마다 결과가 랜덤으로 달라집니다.</p>
-                        </div>
-                    </div>
-                </div>
+            <!-- Random Shuffle Toggle -->
+            <div class="flex items-center gap-2 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200 shrink-0" title="체크 시 실행할 때마다 결과가 조금씩 달라집니다.">
+                <input type="checkbox" id="useRandom" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 border-gray-300 cursor-pointer">
+                <label for="useRandom" class="text-xs font-bold text-purple-700 cursor-pointer select-none">무작위 섞기</label>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="runAnalysis()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow-md transition flex items-center gap-2 shrink-0 text-sm whitespace-nowrap">
+                    <i class="fas fa-play"></i> <span class="hidden md:inline">실행</span>
+                </button>
+                <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-md transition flex items-center gap-2 shrink-0 text-sm whitespace-nowrap">
+                    <i class="fas fa-download"></i> <span class="hidden md:inline">엑셀 저장</span>
+                </button>
             </div>
         </div>
+    </nav>
+
+    <!-- Main Layout -->
+    <div class="flex-grow flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Sidebar -->
+        <aside class="w-full lg:w-[400px] bg-white border-r border-slate-200 flex flex-col overflow-y-auto z-0 shadow-lg shrink-0">
+            <div class="p-4 space-y-5">
+                
+                <!-- Excel Data Management Buttons -->
+                <div class="flex gap-2 mb-2">
+                    <button onclick="downloadTemplate()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-xs font-bold border border-slate-300 transition flex items-center justify-center gap-1">
+                        <i class="fas fa-file-download text-blue-600"></i> 양식 다운로드
+                    </button>
+                    <label class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-lg text-xs font-bold border border-blue-200 transition flex items-center justify-center gap-1 cursor-pointer">
+                        <i class="fas fa-folder-open"></i> 데이터 불러오기
+                        <input type="file" id="uploadInput" accept=".xlsx, .xls" class="hidden" onchange="importData(this)">
+                    </label>
+                </div>
+
+                <div class="border-t border-slate-100 my-1"></div>
+
+                <!-- 1. Master Data -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <span class="bg-slate-800 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span>
+                            기존 명단 (붙여넣기)
+                        </label>
+                        <span class="text-[0.65rem] text-slate-400 font-bold bg-slate-100 px-2 py-0.5 rounded">반 / 이름 / 성별 / 점수</span>
+                    </div>
+                    <textarea id="inputMaster" class="w-full h-40 p-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 transition leading-relaxed" 
+                        placeholder="예시:&#13;&#10;1 / 홍길동 / 남 / 112.5&#13;&#10;1 / 이영희 / 여 / 205.1&#13;&#10;2 / 김철수 / 남 / 180.0"></textarea>
+                </div>
+
+                <!-- 2. Fixed Assignment -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                            <span class="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-xs">2</span>
+                            반 고정 (강제)
+                        </label>
+                        <span class="text-xs text-slate-400">이름 / 반</span>
+                    </div>
+                    <textarea id="inputFixed" class="w-full h-20 p-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 transition" 
+                        placeholder="예: 최일반 / 1"></textarea>
+                </div>
+
+                <div class="border-t border-slate-100 my-1"></div>
+
+                <div class="space-y-4">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">관계 설정</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-green-700 flex items-center gap-1"><i class="fas fa-link"></i> 단짝</label>
+                            <textarea id="inputTogether" class="w-full h-24 p-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-green-500 transition resize-none" placeholder="김철수, 이훈이"></textarea>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-red-600 flex items-center gap-1"><i class="fas fa-bomb"></i> 분리</label>
+                            <textarea id="inputSeparate" class="w-full h-24 p-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-red-500 transition resize-none" placeholder="홍길동, 임꺽정"></textarea>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-bold text-orange-600 flex items-center gap-1"><i class="fas fa-shield-alt"></i> 피하기</label>
+                            <div class="flex items-center gap-1">
+                                <input type="checkbox" id="avoidSplitRight" class="w-3 h-3 text-orange-600 rounded border-gray-300 focus:ring-orange-500" checked>
+                                <label for="avoidSplitRight" class="text-[0.6rem] text-slate-500 font-bold cursor-pointer select-none" title="// 오른쪽 학생들끼리도 가급적 분리합니다">// 이후 학생들 분리</label>
+                            </div>
+                        </div>
+                        <textarea id="inputAvoid" class="w-full h-16 p-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-orange-500 transition resize-none" placeholder="철수, 영희 // 민수, 길동"></textarea>
+                    </div>
+                </div>
+
+                <button onclick="clearAll()" class="w-full py-2 text-xs font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition border border-dashed border-slate-300 hover:border-red-300">
+                    <i class="fas fa-trash-alt mr-1"></i> 입력 초기화
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Results -->
+        <main class="flex-grow bg-slate-50 flex flex-col overflow-hidden relative">
+            
+            <div id="globalStats" class="bg-white border-b border-slate-200 px-6 py-3 flex gap-6 text-sm overflow-x-auto whitespace-nowrap hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] z-10"></div>
+            
+            <div id="statusToast" class="hidden absolute top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold text-sm transition-all duration-300 border border-white/20 backdrop-blur-sm"></div>
+
+            <div id="resultContainer" class="flex-grow p-6 overflow-y-auto">
+                <div class="h-full flex flex-col items-center justify-center text-slate-400">
+                    <div class="bg-white p-8 rounded-full shadow-sm mb-4">
+                        <i class="fas fa-file-excel text-5xl text-indigo-200"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-600">준비 완료</h3>
+                    <p class="text-sm mt-2 max-w-md text-center text-slate-500">
+                        <strong>[양식 다운로드]</strong>를 눌러 엑셀 템플릿을 받고,<br>
+                        내용을 채운 뒤 <strong>[데이터 불러오기]</strong>로 업로드하세요.<br>
+                        개인정보는 서버에 저장되지 않습니다.
+                    </p>
+                </div>
+            </div>
+            
+        </main>
     </div>
 
-    <!-- Logic Script -->
+    <!-- Core Logic -->
     <script>
-        // Global Data Structures for Logic
-        let groupMap = new Map(); // Student Name -> Group ID
-        let groupMembers = new Map(); // Group ID -> [Student Names]
-        let groupAdjacency = new Map(); // Group ID -> Set(Group IDs)
+        class Student {
+            constructor(originalClass, name, gender, score) {
+                this.originalClass = parseInt(originalClass);
+                this.name = name.trim();
+                this.gender = gender.trim() === '여' || gender.toUpperCase() === 'F' ? 'F' : 'M';
+                this.score = parseFloat(score) || 0;
+                this.fixedClass = null;
+                this.teamId = null;
+                this.finalClass = null;
+            }
+        }
+
+        class Team {
+            constructor(id) {
+                this.id = id;
+                this.members = [];
+                this.fixedClass = null;
+                this.originalClass = null;
+                this.constraints = new Set(); 
+                this.softConstraints = new Set();
+            }
+            get totalScore() { return this.members.reduce((sum, s) => sum + s.score, 0); }
+            get count() { return this.members.length; }
+            get genderCount() {
+                return this.members.reduce((acc, s) => {
+                    s.gender === 'M' ? acc.M++ : acc.F++;
+                    return acc;
+                }, { M: 0, F: 0 });
+            }
+            addMember(student) { this.members.push(student); student.teamId = this.id; }
+            resolveOriginalClass() {
+                const classes = this.members.map(m => m.originalClass).filter(c => !isNaN(c) && c > 0);
+                this.originalClass = classes.length > 0 ? classes[0] : null; 
+            }
+        }
+
+        let allStudents = new Map(); 
+        let allTeams = [];
+        let finalClasses = []; 
         
-        // Final Assignment Data for Verification & Interaction
-        let finalAssignment = new Map(); // Student Name -> Class Index (0-based)
-        let processedGroupIdMap = new Map(); // Student Name -> Final Processed Group ID (for identifying team)
-        
-        function getGroupId(name, map, members, ids, nextIdObj) {
-            name = name.trim();
-            if (!name) return null;
-            if (map.has(name)) return map.get(name);
-            
-            const id = nextIdObj.val++;
-            map.set(name, id);
-            members.set(id, [name]);
-            ids.push(id);
-            return id;
+        function showStatus(msg, type = 'info') {
+            const el = document.getElementById('statusToast');
+            el.innerHTML = type === 'error' ? `<i class="fas fa-exclamation-triangle mr-2"></i>${msg}` : `<i class="fas fa-check-circle mr-2"></i>${msg}`;
+            el.className = `absolute top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-lg font-bold text-sm transition-all duration-300 ${type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
         }
 
-        function mergeGroups(id1, id2, map, members, ids) {
-            if (id1 === id2) return id1;
-            const members2 = members.get(id2);
-            const members1 = members.get(id1);
-            members2.forEach(member => {
-                map.set(member, id1);
-                members1.push(member);
-            });
-            members.delete(id2);
-            const idx = ids.indexOf(id2);
-            if (idx > -1) ids.splice(idx, 1);
-            return id1;
+        function parseNames(str) {
+            return str.split(/[\t,]+/).map(s => s.trim()).filter(s => s.length > 0);
         }
 
-        function addConstraint(gid1, gid2, adjMap) {
-            if (gid1 === gid2) return;
-            if (!adjMap.has(gid1)) adjMap.set(gid1, new Set());
-            if (!adjMap.has(gid2)) adjMap.set(gid2, new Set());
-            adjMap.get(gid1).add(gid2);
-            adjMap.get(gid2).add(gid1);
+        function clearAll() {
+            if(!confirm('모든 입력 데이터를 삭제하시겠습니까?')) return;
+            document.querySelectorAll('textarea').forEach(el => el.value = '');
+            document.getElementById('resultContainer').innerHTML = '';
+            document.getElementById('globalStats').classList.add('hidden');
         }
 
-        function parseNames(text) {
-            return text.split(/[\t,]+/).map(s => s.trim()).filter(s => s.length > 0);
+        // --- NEW: Template Download Function ---
+        function downloadTemplate() {
+            const wb = XLSX.utils.book_new();
+
+            // Sheet 1: Existing Roster
+            const ws1Data = [
+                ['진급예정반', '이름', '성별', '점수'], 
+                ['1', '홍길동', '남', '85'],
+                ['1', '이영희', '여', '90'],
+                ['2', '김철수', '남', '88']
+            ];
+            const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+            XLSX.utils.book_append_sheet(wb, ws1, "기존명단");
+
+            // Sheet 2: Fixed Class
+            const ws2Data = [
+                ['이름', '고정반'],
+                ['최일반', '1'],
+                ['김이반', '2']
+            ];
+            const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+            XLSX.utils.book_append_sheet(wb, ws2, "반고정");
+
+            // Sheet 3: Together
+            const ws3Data = [
+                ['설명(선택)', '학생1', '학생2', '학생3', '...'],
+                ['같은반 희망', '김철수', '이훈이', ''],
+                ['삼총사', '박영희', '최미나', '정수정']
+            ];
+            const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
+            XLSX.utils.book_append_sheet(wb, ws3, "단짝");
+
+            // Sheet 4: Separate
+            const ws4Data = [
+                ['설명(선택)', '학생1', '학생2', '학생3', '...'],
+                ['싸움', '홍길동', '임꺽정', ''],
+                ['소란', '장길산', '전우치', '']
+            ];
+            const ws4 = XLSX.utils.aoa_to_sheet(ws4Data);
+            XLSX.utils.book_append_sheet(wb, ws4, "분리");
+
+            // Sheet 5: Avoid
+            const ws5Data = [
+                ['설명(선택)', '학생...', '구분자(//)', '학생...', '...'],
+                ['학폭위', '나피해', '//', '김일진', '박이진'],
+                ['관계', 'A', 'B', '//', 'C', 'D']
+            ];
+            const ws5 = XLSX.utils.aoa_to_sheet(ws5Data);
+            XLSX.utils.book_append_sheet(wb, ws5, "피하기");
+
+            XLSX.writeFile(wb, "반편성_입력양식.xlsx");
         }
 
-        function showStatus(msg, type) {
-            const el = document.getElementById('statusMessage');
-            el.className = `p-3 rounded-lg text-sm font-medium mb-4 block ${type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
-            el.innerHTML = msg;
-            if(type === 'error') {
-                document.getElementById('verificationSection').classList.add('hidden');
-            }
+        // --- NEW: Data Import Function ---
+        function importData(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+
+                // 1. 기존명단 (Sheet 1)
+                if (workbook.SheetNames.length > 0) {
+                    const ws = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    let text = "";
+                    let startRow = 1; // Default
+                    
+                    // Simple heuristic to check if header is row 0
+                    // If row 0 looks like header, start from row 1.
+                    // If not, maybe start from 0? Let's assume standard template usage.
+                    
+                    for (let i = startRow; i < json.length; i++) {
+                        const row = json[i];
+                        if (row.length >= 2) {
+                            const c = row[0] || "";
+                            const n = row[1] || "";
+                            const g = row[2] || "남";
+                            const s = row[3] || "0";
+                            text += `${c} / ${n} / ${g} / ${s}\n`;
+                        }
+                    }
+                    document.getElementById('inputMaster').value = text;
+                }
+
+                // 2. 반고정 (Sheet 2)
+                if (workbook.SheetNames.length > 1) {
+                    const ws = workbook.Sheets[workbook.SheetNames[1]];
+                    const json = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    let text = "";
+                    for (let i = 1; i < json.length; i++) {
+                        const row = json[i];
+                        if (row.length >= 2 && row[0]) {
+                            text += `${row[0]} / ${row[1]}\n`;
+                        }
+                    }
+                    document.getElementById('inputFixed').value = text;
+                }
+
+                // 3. 단짝 (Sheet 3)
+                if (workbook.SheetNames.length > 2) {
+                    const ws = workbook.Sheets[workbook.SheetNames[2]];
+                    const json = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    let text = "";
+                    for (let i = 1; i < json.length; i++) {
+                        const row = json[i];
+                        const names = row.slice(1)
+                            .map(cell => cell == null ? "" : String(cell).trim())
+                            .filter(s => s !== "");
+                        if (names.length > 0) {
+                            text += names.join(', ') + '\n';
+                        }
+                    }
+                    document.getElementById('inputTogether').value = text;
+                }
+
+                // 4. 분리 (Sheet 4)
+                if (workbook.SheetNames.length > 3) {
+                    const ws = workbook.Sheets[workbook.SheetNames[3]];
+                    const json = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    let text = "";
+                    for (let i = 1; i < json.length; i++) {
+                        const row = json[i];
+                        const names = row.slice(1)
+                            .map(cell => cell == null ? "" : String(cell).trim())
+                            .filter(s => s !== "");
+                        if (names.length > 0) {
+                            text += names.join(', ') + '\n';
+                        }
+                    }
+                    document.getElementById('inputSeparate').value = text;
+                }
+
+                // 5. 피하기 (Sheet 5)
+                if (workbook.SheetNames.length > 4) {
+                    const ws = workbook.Sheets[workbook.SheetNames[4]];
+                    const json = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    let text = "";
+                    for (let i = 1; i < json.length; i++) {
+                        let row = json[i];
+                        if (!row || row.length < 2) continue;
+                        
+                        const cells = row.slice(1).map(c => (c != null) ? String(c).trim() : "").filter(s => s !== "");
+                        if (cells.length === 0) continue;
+
+                        const joined = cells.join(', '); 
+                        if (joined.includes('//')) {
+                            text += joined + '\n';
+                        } else if (cells.length >= 2) {
+                            const sepIndex = cells.indexOf('//');
+                            if(sepIndex !== -1) {
+                                const left = cells.slice(0, sepIndex).join(', ');
+                                const right = cells.slice(sepIndex + 1).join(', ');
+                                text += `${left} // ${right}\n`;
+                            } else {
+                                text += `${cells[0]} // ${cells.slice(1).join(', ')}\n`;
+                            }
+                        } else {
+                             text += joined + '\n';
+                        }
+                    }
+                    document.getElementById('inputAvoid').value = text;
+                }
+                
+                showStatus("엑셀 데이터 불러오기 완료!", "success");
+                input.value = "";
+            };
+            reader.readAsArrayBuffer(file);
         }
 
-        function clearInputs() {
-            if(confirm('모든 내용을 초기화하시겠습니까?')) {
-                document.getElementById('inputTogether').value = '';
-                document.getElementById('inputSeparateAll').value = '';
-                document.getElementById('inputSeparateTarget').value = '';
-                document.getElementById('statusMessage').className = "hidden";
-                document.getElementById('verificationSection').classList.add('hidden');
-                document.getElementById('resultCountBadge').classList.add('hidden');
-                document.getElementById('resultGrid').innerHTML = `
-                    <div class="col-span-full text-center py-20 text-slate-400">
-                        <i class="fas fa-chalkboard text-4xl mb-4"></i>
-                        <p>데이터가 초기화되었습니다.</p>
-                    </div>`;
-            }
-        }
-
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-        }
-
-        // --- Main Logic ---
-        function runAssignment() {
-            // Reset Globals
-            groupMap = new Map();
-            groupMembers = new Map();
-            groupAdjacency = new Map();
-            processedGroupIdMap = new Map();
-            finalAssignment = new Map();
-            
-            let groupIds = [];
-            let nextIdObj = { val: 1 };
+        function runAnalysis() {
+            allStudents.clear();
+            allTeams = [];
+            finalClasses = [];
             
             const numClasses = parseInt(document.getElementById('classCount').value) || 10;
-            const textTogether = document.getElementById('inputTogether').value;
-            const textSepAll = document.getElementById('inputSeparateAll').value;
-            const textSepTarget = document.getElementById('inputSeparateTarget').value;
+            const minPerClass = parseInt(document.getElementById('minPerClass').value) || 0;
+            const maxPerClass = parseInt(document.getElementById('maxPerClass').value) || 999;
+            const scoreTolerance = parseFloat(document.getElementById('scoreTolerance').value) || 5.0;
+            const useRandom = document.getElementById('useRandom').checked;
+            // Get Checkbox State
+            const splitRightGroup = document.getElementById('avoidSplitRight').checked;
+            
+            const rawMaster = document.getElementById('inputMaster').value;
+            const rawFixed = document.getElementById('inputFixed').value;
+            const rawTogether = document.getElementById('inputTogether').value;
+            const rawSeparate = document.getElementById('inputSeparate').value;
+            const rawAvoid = document.getElementById('inputAvoid').value;
 
-            // 1. Grouping
-            textTogether.split('\n').forEach(line => {
-                const names = parseNames(line);
-                if (names.length < 1) return;
-                let baseGroupId = getGroupId(names[0], groupMap, groupMembers, groupIds, nextIdObj);
-                for (let i = 1; i < names.length; i++) {
-                    const targetGroupId = getGroupId(names[i], groupMap, groupMembers, groupIds, nextIdObj);
-                    baseGroupId = mergeGroups(baseGroupId, targetGroupId, groupMap, groupMembers, groupIds);
+            const masterLines = rawMaster.split('\n');
+            if (masterLines.length < 2 && !rawMaster.trim()) {
+                showStatus("전교생 명단을 입력해주세요.", 'error');
+                return;
+            }
+
+            masterLines.forEach(line => {
+                if (!line.trim()) return;
+                const parts = line.split('/');
+                if (parts.length < 4) return;
+                const name = parts[1].trim();
+                if (!allStudents.has(name)) {
+                    allStudents.set(name, new Student(parts[0].trim(), name, parts[2].trim(), parts[3] ? parts[3].trim() : "0"));
                 }
             });
 
-            // 2. Constraints
-            // Type 1: All Separate
-            textSepAll.split('\n').forEach(line => {
+            const totalStudents = allStudents.size;
+            if (totalStudents > maxPerClass * numClasses) {
+                showStatus(`오류: 전교생(${totalStudents}명)이 최대수용인원(${maxPerClass*numClasses}명)을 초과합니다.`, 'error');
+                return;
+            }
+            if (totalStudents < minPerClass * numClasses) {
+                showStatus(`오류: 전교생(${totalStudents}명)이 최소인원합계(${minPerClass*numClasses}명)보다 적습니다.`, 'error');
+                return;
+            }
+
+            let tempTeamMap = new Map();
+            let nextTeamId = 0;
+            const getTeamId = (name) => {
+                if (!allStudents.has(name)) return null; 
+                if (!tempTeamMap.has(name)) tempTeamMap.set(name, nextTeamId++);
+                return tempTeamMap.get(name);
+            }
+
+            let teamMerges = new Map();
+            for (let i = 0; i < allStudents.size * 2; i++) teamMerges.set(i, i);
+            const findRoot = (id) => {
+                if (teamMerges.get(id) === id) return id;
+                const root = findRoot(teamMerges.get(id));
+                teamMerges.set(id, root);
+                return root;
+            }
+            const unionTeams = (id1, id2) => {
+                const r1 = findRoot(id1), r2 = findRoot(id2);
+                if (r1 !== r2) teamMerges.set(r2, r1);
+            }
+
+            rawTogether.split('\n').forEach(line => {
                 const names = parseNames(line);
                 if (names.length < 2) return;
-                for (let i = 0; i < names.length; i++) {
-                    for (let j = i + 1; j < names.length; j++) {
-                        const g1 = getGroupId(names[i], groupMap, groupMembers, groupIds, nextIdObj);
-                        const g2 = getGroupId(names[j], groupMap, groupMembers, groupIds, nextIdObj);
-                        if(g1 === g2) {
-                            showStatus(`⚠️ 모순 발생: '${names[i]}'와(과) '${names[j]}'는 같이 있어야 하면서 동시에 떨어져야 합니다.`, 'error');
-                            return;
-                        }
-                        addConstraint(g1, g2, groupAdjacency);
-                    }
+                const validIds = names.map(n => getTeamId(n)).filter(id => id !== null);
+                for (let i = 0; i < validIds.length - 1; i++) unionTeams(validIds[i], validIds[i+1]);
+            });
+
+            let rootToTeamObj = new Map();
+            allStudents.forEach((student, name) => {
+                const tid = getTeamId(name);
+                const rootId = findRoot(tid);
+                if (!rootToTeamObj.has(rootId)) rootToTeamObj.set(rootId, new Team(rootId));
+                rootToTeamObj.get(rootId).addMember(student);
+            });
+            allTeams = Array.from(rootToTeamObj.values());
+            allTeams.forEach(t => t.resolveOriginalClass());
+
+            rawFixed.split('\n').forEach(line => {
+                if (!line.includes('/')) return;
+                const [name, cNum] = line.split('/').map(s=>s.trim());
+                const student = allStudents.get(name);
+                if (student) {
+                    const team = rootToTeamObj.get(findRoot(student.teamId));
+                    team.fixedClass = parseInt(cNum);
+                    team.members.forEach(m => m.fixedClass = parseInt(cNum));
                 }
             });
 
-            // Type 2: Target vs List
-            textSepTarget.split('\n').forEach(line => {
-                if (!line.includes('//')) return;
-                const parts = line.split('//');
-                const targetNames = parseNames(parts[0]);
-                const avoidNames = parseNames(parts[1]);
-                if (targetNames.length === 0 || avoidNames.length === 0) return;
+            let teamConstraints = new Map();
+            allTeams.forEach(t => teamConstraints.set(t, new Set()));
+            
+            const addConstraint = (n1, n2) => {
+                const t1 = rootToTeamObj.get(findRoot(getTeamId(n1)));
+                const t2 = rootToTeamObj.get(findRoot(getTeamId(n2)));
+                if (t1 && t2 && t1 !== t2) { t1.constraints.add(t2.id); t2.constraints.add(t1.id); }
+            };
+            const addSoftConstraint = (n1, n2) => {
+                const t1 = rootToTeamObj.get(findRoot(getTeamId(n1)));
+                const t2 = rootToTeamObj.get(findRoot(getTeamId(n2)));
+                if (t1 && t2 && t1 !== t2) { t1.softConstraints.add(t2.id); t2.softConstraints.add(t1.id); }
+            };
 
-                // Target vs Avoid
-                targetNames.forEach(tName => {
-                    const tGroup = getGroupId(tName, groupMap, groupMembers, groupIds, nextIdObj);
-                    avoidNames.forEach(aName => {
-                        const aGroup = getGroupId(aName, groupMap, groupMembers, groupIds, nextIdObj);
-                        if(tGroup === aGroup) {
-                            showStatus(`⚠️ 모순 발생: '${tName}'와(과) '${aName}'는 같이 있어야 하면서 동시에 떨어져야 합니다.`, 'error');
-                            return;
-                        }
-                        addConstraint(tGroup, aGroup, groupAdjacency);
-                    });
+            try {
+                // Separate
+                rawSeparate.split('\n').forEach(line => {
+                    const names = parseNames(line);
+                    for(let i=0; i<names.length; i++) for(let j=i+1; j<names.length; j++) addConstraint(names[i], names[j]);
                 });
-
-                // Avoid vs Avoid (Constraint: They should also be separated from each other)
-                for (let i = 0; i < avoidNames.length; i++) {
-                    for (let j = i + 1; j < avoidNames.length; j++) {
-                        const g1 = getGroupId(avoidNames[i], groupMap, groupMembers, groupIds, nextIdObj);
-                        const g2 = getGroupId(avoidNames[j], groupMap, groupMembers, groupIds, nextIdObj);
-                        if (g1 !== g2) {
-                            addConstraint(g1, g2, groupAdjacency);
-                        }
-                    }
-                }
-            });
-
-            // 3. Solving (Graph Coloring)
-            shuffleArray(groupIds);
-            groupIds.sort((a, b) => {
-                const degA = groupAdjacency.has(a) ? groupAdjacency.get(a).size : 0;
-                const degB = groupAdjacency.has(b) ? groupAdjacency.get(b).size : 0;
-                return degB - degA;
-            });
-
-            const assignment = new Map(); // GroupID -> ClassIdx
-            const baseClassIndices = Array.from({length: numClasses}, (_, i) => i);
-            let success = true;
-            let unassignedGroups = [];
-
-            for (let gid of groupIds) {
-                let assigned = false;
-                const randomClassIndices = [...baseClassIndices];
-                shuffleArray(randomClassIndices);
-
-                for (let c of randomClassIndices) {
-                    // Check if safe
-                    let safe = true;
-                    if (groupAdjacency.has(gid)) {
-                        for (let neighborId of groupAdjacency.get(gid)) {
-                            if (assignment.has(neighborId) && assignment.get(neighborId) === c) {
-                                safe = false;
-                                break;
+                
+                // Avoid
+                rawAvoid.split('\n').forEach(line => {
+                    if(!line.includes('//')) return;
+                    const parts = line.split('//');
+                    const targets = parseNames(parts[0]);
+                    const avoids = parseNames(parts[1]);
+                    
+                    // Left vs Right: Always Hard
+                    targets.forEach(t => avoids.forEach(a => addConstraint(t, a)));
+                    
+                    // Right vs Right: Soft IF CHECKED
+                    if (splitRightGroup) {
+                        for(let i=0; i<avoids.length; i++) {
+                            for(let j=i+1; j<avoids.length; j++) {
+                                addSoftConstraint(avoids[i], avoids[j]);
                             }
                         }
                     }
-                    if (safe) {
-                        assignment.set(gid, c);
-                        assigned = true;
-                        break;
-                    }
-                }
-                if (!assigned) {
-                    success = false;
-                    unassignedGroups.push(groupMembers.get(gid).join(', '));
+                });
+            } catch(e) {}
+
+            // Shuffle
+            if (useRandom) {
+                for (let i = allTeams.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [allTeams[i], allTeams[j]] = [allTeams[j], allTeams[i]];
                 }
             }
 
-            // 4. Render
-            if (!success) {
-                const showCount = 5;
-                const remaining = unassignedGroups.length - showCount;
-                let failMsg = unassignedGroups.slice(0, showCount).join(' / ');
-                if (remaining > 0) failMsg += ` 외 ${remaining}팀`;
-                showStatus(`⚠️ <strong>배정 실패</strong><br>조건이 너무 까다로워 반 개수(${numClasses}개) 내에 모두 분리할 수 없습니다.<br>갈 곳 없는 학생(팀):<br><span class="text-xs text-red-600 mt-1 block">${failMsg}</span>`, 'error');
+            // Sort
+            allTeams.sort((a, b) => {
+                if (a.fixedClass && !b.fixedClass) return -1;
+                if (!a.fixedClass && b.fixedClass) return 1;
+                return b.constraints.size - a.constraints.size || b.totalScore - a.totalScore;
+            });
+
+            let classes = Array.from({length: numClasses}, (_, i) => ({
+                id: i+1, teams: [], students: [], totalScore: 0, gender: { M: 0, F: 0 }, count: 0
+            }));
+            
+            let globalM = 0, globalF = 0, totalGlobalScore = 0;
+            allStudents.forEach(s => { 
+                s.gender === 'M' ? globalM++ : globalF++; 
+                totalGlobalScore += s.score;
+            });
+            const globalAvgScore = totalGlobalScore / totalStudents;
+
+            let studentsRemaining = allStudents.size;
+            let movedCount = 0;
+            let failedTeams = [];
+
+            allTeams.forEach(team => {
+                const futureRemaining = studentsRemaining - team.count;
+
+                let validClasses = classes.filter(c => {
+                    if (c.teams.some(existing => team.constraints.has(existing.id))) return false;
+                    if (c.count + team.count > maxPerClass) return false;
+                    
+                    // Starvation Check
+                    let deficitSum = 0;
+                    classes.forEach(oc => {
+                        let ocCount = oc.count;
+                        if (oc === c) ocCount += team.count;
+                        deficitSum += Math.max(0, minPerClass - ocCount);
+                    });
+                    if (futureRemaining < deficitSum) return false;
+
+                    return true;
+                });
+
+                if (validClasses.length === 0) {
+                    failedTeams.push(team);
+                    studentsRemaining -= team.count; 
+                    return;
+                }
+
+                let bestClass = null;
+                if (team.fixedClass) {
+                    bestClass = validClasses.find(c => c.id === team.fixedClass);
+                    if (!bestClass) { failedTeams.push(team); studentsRemaining -= team.count; return; }
+                } else {
+                    // *** HYBRID LOGIC: Water Filling + Tolerance Check ***
+                    
+                    const candidates = [...validClasses];
+                    candidates.sort((c1, c2) => {
+                        // Gender Balance (Absolute priority for Water Filling)
+                        const mDiff = team.genderCount.M;
+                        const fDiff = team.genderCount.F;
+                        let c1Load = (mDiff >= fDiff) ? c1.gender.M : c1.gender.F;
+                        let c2Load = (mDiff >= fDiff) ? c2.gender.M : c2.gender.F;
+                        if (mDiff === 0 && fDiff === 0) { c1Load = c1.count; c2Load = c2.count; }
+
+                        if (c1Load !== c2Load) return c1Load - c2Load;
+                        
+                        // Total Count Secondary
+                        if (c1.count !== c2.count) return c1.count - c2.count;
+                        
+                        // Randomness
+                        if (useRandom && Math.abs(c1.totalScore - c2.totalScore) < 1) {
+                            return Math.random() - 0.5;
+                        }
+
+                        return c1.totalScore - c2.totalScore;
+                    });
+                    
+                    const bestBalanceClass = candidates[0];
+                    
+                    // Smart Retention Check
+                    let originalCandidate = null;
+                    if (team.originalClass) {
+                        originalCandidate = validClasses.find(c => c.id === team.originalClass);
+                    }
+
+                    if (originalCandidate) {
+                        const mDiff = team.genderCount.M;
+                        const fDiff = team.genderCount.F;
+                        let bestLoad = (mDiff >= fDiff) ? bestBalanceClass.gender.M : bestBalanceClass.gender.F;
+                        let origLoad = (mDiff >= fDiff) ? originalCandidate.gender.M : originalCandidate.gender.F;
+                        if (mDiff === 0 && fDiff === 0) { bestLoad = bestBalanceClass.count; origLoad = originalCandidate.count; }
+
+                        const genderImbalance = origLoad - bestLoad; 
+                        const countImbalance = originalCandidate.count - bestBalanceClass.count;
+
+                        const currentSum = originalCandidate.totalScore + team.totalScore;
+                        const currentCount = originalCandidate.count + team.count;
+                        const projectedAvg = currentSum / currentCount;
+                        const scoreDeviation = Math.abs(projectedAvg - globalAvgScore);
+
+                        let softViolation = false;
+                        originalCandidate.teams.forEach(existing => { if(team.softConstraints.has(existing.id)) softViolation = true; });
+
+                        // Tolerance: Allow +1 imbalance, score deviation within tolerance
+                        if (genderImbalance <= 1 && countImbalance <= 1 && scoreDeviation <= scoreTolerance && !softViolation) {
+                            bestClass = originalCandidate;
+                        } else {
+                            bestClass = bestBalanceClass;
+                        }
+                    } else {
+                        bestClass = bestBalanceClass;
+                    }
+                }
+
+                bestClass.teams.push(team);
+                bestClass.students.push(...team.members);
+                bestClass.totalScore += team.totalScore;
+                bestClass.gender.M += team.genderCount.M;
+                bestClass.gender.F += team.genderCount.F;
+                bestClass.count += team.count;
+
+                team.members.forEach(m => {
+                    m.finalClass = bestClass.id;
+                    if (m.originalClass && m.originalClass !== bestClass.id) movedCount++;
+                });
+                
+                studentsRemaining -= team.count;
+            });
+
+            finalClasses = classes; // Store for export
+
+            if (failedTeams.length > 0) {
+                const names = failedTeams.map(t => t.members[0].name).slice(0, 3).join(', ');
+                showStatus(`실패: ${names} 외 ${failedTeams.length-1}팀. 조건/인원을 확인하세요.`, 'error');
                 return;
             }
 
-            // 5. Store Final Data for Verification/Interaction
-            let totalStudents = 0;
-            assignment.forEach((classIdx, gid) => {
-                const members = groupMembers.get(gid);
-                members.forEach(m => {
-                    finalAssignment.set(m, classIdx);
-                    processedGroupIdMap.set(m, gid); // Save group ID for highlighting
-                    totalStudents++;
-                });
-            });
+            renderDashboard(classes, allStudents.size, movedCount, minPerClass, maxPerClass);
+            showStatus(`최적화 완료! 총 ${movedCount}명 이동 (허용오차 내 원반 유지)`, 'success');
+        }
 
-            // Update UI Stats
-            document.getElementById('resultCountBadge').classList.remove('hidden');
-            document.getElementById('resultCountBadge').innerText = `${totalStudents}명 배정`;
-            showStatus(`✅ <strong>배정 완료!</strong> (총 ${groupIds.length}개 그룹 배치)<br>버튼을 누를 때마다 랜덤으로 다시 배정됩니다.`, 'success');
-
-            // Draw Grid
-            const grid = document.getElementById('resultGrid');
-            grid.innerHTML = '';
+        function renderDashboard(classes, total, moved, min, max) {
+            const container = document.getElementById('resultContainer');
+            const globalStats = document.getElementById('globalStats');
             
-            // Organize for rendering
-            const classes = Array.from({length: numClasses}, () => []);
-            finalAssignment.forEach((classIdx, name) => {
-                classes[classIdx].push(name);
-            });
+            container.innerHTML = '';
+            globalStats.classList.remove('hidden');
 
-            classes.forEach((members, idx) => {
-                const classNum = idx + 1;
-                members.sort(); // Sort alphabetically within class
+            let tS = 0, tM = 0, tF = 0;
+            classes.forEach(c => { tS+=c.totalScore; tM+=c.gender.M; tF+=c.gender.F; });
+            const globalAvg = (tS/total).toFixed(1);
+            
+            globalStats.innerHTML = `
+                <div class="flex items-center gap-2"><span class="font-bold text-slate-600">이동</span><span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">${moved}</span></div>
+                <div class="w-px h-4 bg-slate-300"></div>
+                <div class="flex items-center gap-2"><span class="font-bold text-slate-600">성비</span><span class="text-blue-600 font-bold"><i class="fas fa-mars"></i> ${tM}</span><span class="text-pink-600 font-bold"><i class="fas fa-venus"></i> ${tF}</span></div>
+                <div class="w-px h-4 bg-slate-300"></div>
+                <div class="flex items-center gap-2"><span class="font-bold text-slate-600">전체평균</span><span class="text-slate-800 font-bold">${globalAvg}</span></div>
+            `;
+
+            const grid = document.createElement('div');
+            grid.className = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6";
+
+            classes.forEach(c => {
+                const avg = c.count > 0 ? (c.totalScore/c.count).toFixed(1) : 0;
+                const diff = (avg - globalAvg).toFixed(1);
+                c.students.sort((a,b) => (a.originalClass!==c.id) === (b.originalClass!==c.id) ? b.score-a.score : (a.originalClass!==c.id ? -1 : 1));
                 
+                let countColor = 'text-slate-500';
+                if (c.count < min || c.count > max) countColor = 'text-red-600 font-bold';
+                else if (c.count === min || c.count === max) countColor = 'text-indigo-600 font-bold';
+
                 const card = document.createElement('div');
-                card.className = "class-card bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col relative";
-                card.setAttribute('data-class-idx', idx); // For search highlighting
-                
+                card.className = "class-card bg-white rounded-xl shadow border border-slate-200 p-4 flex flex-col transition hover:shadow-md";
                 card.innerHTML = `
-                    <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
-                        <h3 class="font-bold text-lg text-slate-800">${classNum}반</h3>
-                        <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">${members.length}명</span>
+                    <div class="flex justify-between items-start mb-3 border-b border-slate-100 pb-2">
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center">${c.id}반 <span class="text-sm font-normal ml-2 ${countColor}">(${c.count}명)</span></h3>
+                            <div class="text-xs space-x-2 mt-1"><span class="text-blue-600"><i class="fas fa-mars"></i> ${c.gender.M}</span><span class="text-pink-600"><i class="fas fa-venus"></i> ${c.gender.F}</span></div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-bold text-indigo-700">Avg: ${avg}</div>
+                            <div class="text-[0.65rem] text-slate-400">(${diff > 0 ? '+'+diff : diff})</div>
+                        </div>
                     </div>
-                    <div class="flex-grow student-container">
-                        ${members.length > 0 
-                            ? members.map(m => `<span class="student-tag" onclick="highlightStudent('${m}')" data-name="${m}">${m}</span>`).join('') 
-                            : '<span class="text-slate-400 text-sm">배정된 학생 없음</span>'}
-                    </div>
+                    <div class="flex-grow flex flex-wrap content-start">${c.students.map(s => {
+                        let badges = '';
+                        if(s.originalClass && s.originalClass !== c.id) badges += `<span class="move-badge">${s.originalClass}→${c.id}</span>`;
+                        if(s.fixedClass) badges += '<i class="fas fa-thumbtack fixed-pin mr-1"></i>';
+                        return `<span class="student-chip ${s.gender==='M'?'chip-male':'chip-female'}" onclick="highlight('${s.name}')" data-name="${s.name}">${badges} ${s.name} <span class="text-[0.65rem] opacity-60 ml-1">${s.score}</span></span>`;
+                    }).join('')}</div>
                 `;
                 grid.appendChild(card);
             });
-
-            // 6. Run Verification
-            verifyResults();
+            container.appendChild(grid);
         }
 
-        // --- Feature 1: Verification ---
-        function verifyResults() {
-            const reportDetails = document.getElementById('reportDetails');
-            const section = document.getElementById('verificationSection');
-            const summary = document.getElementById('verificationSummary');
+        function highlight(name) {
+            document.querySelectorAll('.student-chip').forEach(el => el.classList.remove('highlight-target', 'highlight-friend', 'highlight-enemy', 'dimmed'));
+            const student = allStudents.get(name);
+            if (!student) return;
+            const team = allTeams.find(t => t.members.some(m => m.name === name));
+            if (!team) return;
             
-            section.classList.remove('hidden');
-            reportDetails.innerHTML = '';
-            
-            let totalChecks = 0;
-            let passChecks = 0;
-            let logs = [];
-
-            function addLog(pass, msg) {
-                totalChecks++;
-                if (pass) passChecks++;
-                const icon = pass ? '<i class="fas fa-check text-green-500 mr-2"></i>' : '<i class="fas fa-times text-red-500 mr-2"></i>';
-                const color = pass ? 'text-slate-600' : 'text-red-600 font-bold';
-                logs.push(`<div class="mb-1 ${color}">${icon}${msg}</div>`);
-            }
-
-            // Verify "Together"
-            const textTogether = document.getElementById('inputTogether').value;
-            textTogether.split('\n').forEach(line => {
-                const names = parseNames(line);
-                if (names.length < 2) return;
-                
-                // Check if all in same class
-                const firstClass = finalAssignment.get(names[0]);
-                let allSame = true;
-                names.forEach(n => {
-                    if (finalAssignment.get(n) !== firstClass) allSame = false;
-                });
-                
-                const classNum = firstClass !== undefined ? firstClass + 1 : '?';
-                addLog(allSame, `[단짝] ${names.join(', ')} → 모두 ${classNum}반 배정`);
+            document.querySelectorAll('.student-chip').forEach(el => el.classList.add('dimmed'));
+            team.members.forEach(m => document.querySelector(`.student-chip[data-name="${m.name}"]`)?.classList.replace('dimmed', m.name===name?'highlight-target':'highlight-friend'));
+            team.constraints.forEach(eid => {
+                const et = allTeams.find(t => t.id === eid);
+                if(et) et.members.forEach(m => document.querySelector(`.student-chip[data-name="${m.name}"]`)?.classList.replace('dimmed', 'highlight-enemy'));
             });
-
-            // Verify "Separate All"
-            const textSepAll = document.getElementById('inputSeparateAll').value;
-            textSepAll.split('\n').forEach(line => {
-                const names = parseNames(line);
-                if (names.length < 2) return;
-                
-                let collision = false;
-                let classMap = new Map();
-                names.forEach(n => {
-                    const c = finalAssignment.get(n);
-                    if (classMap.has(c)) collision = true;
-                    classMap.set(c, true);
-                });
-
-                addLog(!collision, `[분리] ${names.join(', ')} → 모두 다른 반 배정`);
-            });
-
-            // Verify "Separate Target"
-            const textSepTarget = document.getElementById('inputSeparateTarget').value;
-            textSepTarget.split('\n').forEach(line => {
-                if (!line.includes('//')) return;
-                const parts = line.split('//');
-                const targets = parseNames(parts[0]);
-                const avoids = parseNames(parts[1]);
-                if (targets.length === 0 || avoids.length === 0) return;
-
-                // Check Target vs Avoids
-                let tvsaPass = true;
-                targets.forEach(t => {
-                    const tClass = finalAssignment.get(t);
-                    avoids.forEach(a => {
-                        if (finalAssignment.get(a) === tClass) tvsaPass = false;
-                    });
-                });
-                addLog(tvsaPass, `[피하기] ${targets.join(',')} // ${avoids.join(',')} → 분리됨`);
-
-                // Check Avoids vs Avoids (Implicit Rule)
-                let avsaPass = true;
-                let classMap = new Map();
-                avoids.forEach(a => {
-                    const c = finalAssignment.get(a);
-                    if (classMap.has(c)) avsaPass = false;
-                    classMap.set(c, true);
-                });
-                // Only log this if relevant (more than 1 avoid)
-                if (avoids.length > 1) {
-                    addLog(avsaPass, `[피하기 그룹 내 분산] ${avoids.join(', ')} → 서로 다른 반`);
-                }
-            });
-
-            if (totalChecks === 0) {
-                summary.innerText = "검증할 별도 조건이 없습니다.";
-            } else {
-                summary.innerText = `총 ${totalChecks}개 조건 중 ${passChecks}개 만족 (${passChecks === totalChecks ? '100% 성공' : '실패 존재'})`;
-            }
-            
-            reportDetails.innerHTML = logs.length > 0 ? logs.join('') : '<div class="text-slate-400 italic">검증할 로그가 없습니다.</div>';
         }
+        
+        document.addEventListener('click', e => { if(!e.target.closest('.student-chip')) document.querySelectorAll('.student-chip').forEach(el => el.classList.remove('highlight-target', 'highlight-friend', 'highlight-enemy', 'dimmed')); });
 
-        function toggleReport() {
-            const el = document.getElementById('reportDetails');
-            const icon = document.getElementById('reportToggleIcon');
-            if (el.classList.contains('open')) {
-                el.classList.remove('open');
-                icon.style.transform = 'rotate(0deg)';
-            } else {
-                el.classList.add('open');
-                icon.style.transform = 'rotate(180deg)';
-            }
-        }
-
-        // --- Feature 2: Click Interaction ---
-        function highlightStudent(name) {
-            // Remove all existing highlights
-            document.querySelectorAll('.student-tag').forEach(el => {
-                el.classList.remove('highlight-self', 'highlight-friend', 'highlight-enemy', 'dimmed');
-            });
-
-            // If clicking empty space (handled by global listener usually, but for now simple toggle logic)
-            // We just implement "Active" state.
-            
-            const myGid = processedGroupIdMap.get(name);
-            if (myGid === undefined) return; // Error or not found
-
-            // 1. Dim everyone first
-            document.querySelectorAll('.student-tag').forEach(el => el.classList.add('dimmed'));
-
-            // 2. Highlight Self
-            const selfTag = document.querySelector(`.student-tag[data-name="${name}"]`);
-            if (selfTag) {
-                selfTag.classList.remove('dimmed');
-                selfTag.classList.add('highlight-self');
-            }
-
-            // 3. Highlight Friends (Same Group)
-            const friends = groupMembers.get(myGid) || [];
-            friends.forEach(fName => {
-                if (fName === name) return;
-                const tag = document.querySelector(`.student-tag[data-name="${fName}"]`);
-                if (tag) {
-                    tag.classList.remove('dimmed');
-                    tag.classList.add('highlight-friend');
-                }
-            });
-
-            // 4. Highlight Enemies (Adjacent Groups)
-            if (groupAdjacency.has(myGid)) {
-                const enemyGids = groupAdjacency.get(myGid);
-                enemyGids.forEach(eGid => {
-                    const enemies = groupMembers.get(eGid);
-                    enemies.forEach(eName => {
-                        const tag = document.querySelector(`.student-tag[data-name="${eName}"]`);
-                        if (tag) {
-                            tag.classList.remove('dimmed');
-                            tag.classList.add('highlight-enemy');
-                        }
-                    });
-                });
-            }
-        }
-
-        // Clear highlights when clicking background
-        document.addEventListener('click', function(e) {
-            if (!e.target.classList.contains('student-tag')) {
-                document.querySelectorAll('.student-tag').forEach(el => {
-                    el.classList.remove('highlight-self', 'highlight-friend', 'highlight-enemy', 'dimmed');
-                });
-            }
-        });
-
-        // --- Feature 3: Search ---
-        function searchStudent() {
-            const query = document.getElementById('studentSearch').value.trim().toLowerCase();
-            const cards = document.querySelectorAll('.class-card');
-            
-            // If empty, reset
-            if (!query) {
-                cards.forEach(card => card.style.opacity = '1');
-                document.querySelectorAll('.student-tag').forEach(t => {
-                    t.classList.remove('highlight-self', 'dimmed');
-                });
+        // --- Export Function ---
+        function exportToExcel() {
+            if (finalClasses.length === 0) {
+                alert("먼저 [편성 실행]을 눌러 반 편성을 완료해주세요.");
                 return;
             }
 
-            // Highlight Logic
-            let found = false;
-            cards.forEach(card => {
-                const tags = card.querySelectorAll('.student-tag');
-                let cardHasMatch = false;
-                
-                tags.forEach(tag => {
-                    if (tag.innerText.toLowerCase().includes(query)) {
-                        tag.classList.add('highlight-self');
-                        tag.classList.remove('dimmed');
-                        cardHasMatch = true;
-                        found = true;
-                    } else {
-                        tag.classList.remove('highlight-self');
-                        tag.classList.add('dimmed');
-                    }
-                });
+            const wb = XLSX.utils.book_new();
 
-                if (cardHasMatch) {
-                    card.style.opacity = '1';
-                } else {
-                    card.style.opacity = '0.4';
+            // 1. Sheet: Roster (명단)
+            let rosterData = [];
+            finalClasses.forEach(c => {
+                c.students.forEach(s => {
+                    let note = [];
+                    if (s.originalClass && s.originalClass !== c.id) note.push(`이동(${s.originalClass}→${c.id})`);
+                    if (s.fixedClass) note.push("고정");
+                    
+                    rosterData.push({
+                        "반": c.id,
+                        "이름": s.name,
+                        "성별": s.gender === 'M' ? '남' : '여',
+                        "점수": s.score,
+                        "기존반": s.originalClass || "",
+                        "비고": note.join(", ")
+                    });
+                });
+            });
+            // Sort Roster
+            rosterData.sort((a,b) => (a.반 - b.반) || (a.이름.localeCompare(b.이름)));
+            const wsRoster = XLSX.utils.json_to_sheet(rosterData);
+            XLSX.utils.book_append_sheet(wb, wsRoster, "반편성명부");
+
+            // 2. Sheet: Stats (통계)
+            let statsData = [];
+            let totalS = 0, totalM = 0, totalF = 0, totalCount = 0;
+            finalClasses.forEach(c => {
+                const avg = c.count > 0 ? (c.totalScore / c.count).toFixed(2) : 0;
+                totalS += c.totalScore; totalM += c.gender.M; totalF += c.gender.F; totalCount += c.count;
+                statsData.push({
+                    "반": c.id,
+                    "총원": c.count,
+                    "남": c.gender.M,
+                    "여": c.gender.F,
+                    "평균점수": avg
+                });
+            });
+            const globalAvg = (totalS / totalCount).toFixed(2);
+            statsData.forEach(d => d["평균편차"] = (d.평균점수 - globalAvg).toFixed(2));
+            const wsStats = XLSX.utils.json_to_sheet(statsData);
+            XLSX.utils.book_append_sheet(wb, wsStats, "학급통계");
+
+            // 3. Sheet: Verification (조건검증 - Multi-row Style)
+            let verifyData = [];
+            
+            // Helper to get formatted name trace
+            const getTrace = (name) => {
+                const s = allStudents.get(name);
+                if (!s) return `${name}(?)`;
+                return `${name}(${s.originalClass}→${s.finalClass})`;
+            };
+
+            // Fixed
+            document.getElementById('inputFixed').value.split('\n').forEach(line => {
+                if(!line.includes('/')) return;
+                const [name, cNumStr] = line.split('/').map(s=>s.trim());
+                const targetClass = parseInt(cNumStr);
+                const student = allStudents.get(name);
+                if(student) {
+                    const success = (student.finalClass === targetClass);
+                    verifyData.push({ "구분": "반고정", "입력": `${name}(${targetClass}반)`, "결과": success ? "O" : "X", "상세내용": getTrace(name) });
                 }
             });
-        }
 
-        function copyResults() {
-            const grid = document.getElementById('resultGrid');
-            if(grid.children.length === 0 || grid.innerText.includes('데이터를 입력하고')) {
-                alert('복사할 결과가 없습니다.');
-                return;
+            // Together
+            document.getElementById('inputTogether').value.split('\n').forEach(line => {
+                const names = parseNames(line);
+                if(names.length < 2) return;
+                const firstClass = allStudents.get(names[0])?.finalClass;
+                const allSame = names.every(n => allStudents.get(n)?.finalClass === firstClass);
+                
+                verifyData.push({ "구분": "단짝", "입력": line, "결과": allSame ? "O" : "X", "상세내용": getTrace(names[0]) });
+                for(let i=1; i<names.length; i++) {
+                    verifyData.push({ "구분": "", "입력": "", "결과": "", "상세내용": getTrace(names[i]) });
+                }
+            });
+
+            // Separate
+            document.getElementById('inputSeparate').value.split('\n').forEach(line => {
+                const names = parseNames(line);
+                if(names.length < 2) return;
+                const classes = names.map(n => allStudents.get(n)?.finalClass);
+                const unique = new Set(classes).size === classes.length;
+                
+                verifyData.push({ "구분": "분리", "입력": line, "결과": unique ? "O" : "X", "상세내용": getTrace(names[0]) });
+                for(let i=1; i<names.length; i++) {
+                    verifyData.push({ "구분": "", "입력": "", "결과": "", "상세내용": getTrace(names[i]) });
+                }
+            });
+
+            // Avoid
+            document.getElementById('inputAvoid').value.split('\n').forEach(line => {
+                if(!line.includes('//')) return;
+                const [targets, avoids] = line.split('//').map(s => parseNames(s));
+                const tClasses = targets.map(n => allStudents.get(n)?.finalClass);
+                const aClasses = avoids.map(n => allStudents.get(n)?.finalClass);
+                const conflict = tClasses.some(tc => aClasses.includes(tc));
+                
+                verifyData.push({ "구분": "피하기", "입력": line, "결과": !conflict ? "O" : "X", "상세내용": `[기준] ${getTrace(targets[0])}` });
+                for(let i=1; i<targets.length; i++) verifyData.push({ "구분": "", "입력": "", "결과": "", "상세내용": `[기준] ${getTrace(targets[i])}` });
+                for(let i=0; i<avoids.length; i++) verifyData.push({ "구분": "", "입력": "", "결과": "", "상세내용": `[회피] ${getTrace(avoids[i])}` });
+            });
+
+            const wsVerify = XLSX.utils.json_to_sheet(verifyData);
+            XLSX.utils.book_append_sheet(wb, wsVerify, "조건검증");
+
+            // 4. Sheet: Summary (반편성요약 - Vertical Style)
+            let summaryData = [];
+            
+            // Header: Classes
+            let headerRow = [];
+            finalClasses.forEach(c => headerRow.push(c.id + "반"));
+            summaryData.push(headerRow);
+
+            // Row: "남학생" Label
+            summaryData.push(new Array(finalClasses.length).fill("남학생"));
+
+            // Find max rows for males and females
+            let maxMale = 0, maxFemale = 0;
+            finalClasses.forEach(c => {
+                const m = c.students.filter(s => s.gender === 'M').length;
+                const f = c.students.filter(s => s.gender === 'F').length;
+                if (m > maxMale) maxMale = m;
+                if (f > maxFemale) maxFemale = f;
+            });
+
+            // Male Rows
+            for(let i=0; i<maxMale; i++) {
+                let row = [];
+                finalClasses.forEach(c => {
+                    let males = c.students.filter(s => s.gender === 'M').sort((a,b) => a.name.localeCompare(b.name));
+                    row.push(males[i] ? males[i].name : "");
+                });
+                summaryData.push(row);
             }
-            let text = "학급 편성 결과\n================\n";
-            const cards = grid.querySelectorAll('.class-card');
-            cards.forEach(card => {
-                const title = card.querySelector('h3').innerText;
-                const count = card.querySelector('span.rounded-full').innerText;
-                const students = Array.from(card.querySelectorAll('.student-tag')).map(s => s.innerText).join(', ');
-                text += `[${title}] (${count}) : ${students}\n`;
-            });
-            navigator.clipboard.writeText(text).then(() => {
-                alert('결과가 클립보드에 복사되었습니다.');
-            });
+
+            // Separator
+            summaryData.push([]); 
+
+            // Row: "여학생" Label
+            summaryData.push(new Array(finalClasses.length).fill("여학생"));
+
+            // Female Rows
+            for(let i=0; i<maxFemale; i++) {
+                let row = [];
+                finalClasses.forEach(c => {
+                    let females = c.students.filter(s => s.gender === 'F').sort((a,b) => a.name.localeCompare(b.name));
+                    row.push(females[i] ? females[i].name : "");
+                });
+                summaryData.push(row);
+            }
+
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+            XLSX.utils.book_append_sheet(wb, wsSummary, "반편성요약");
+
+            XLSX.writeFile(wb, "반편성결과.xlsx");
         }
     </script>
 </body>
