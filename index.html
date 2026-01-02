@@ -113,12 +113,12 @@
                     <div class="flex justify-between items-center">
                         <label class="text-sm font-bold text-slate-800 flex items-center gap-2">
                             <span class="bg-slate-800 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">1</span>
-                            기존 명단 (붙여넣기)
+                            전체 명단
                         </label>
-                        <span class="text-[0.65rem] text-slate-400 font-bold bg-slate-100 px-2 py-0.5 rounded">반 / 이름 / 성별 / 점수</span>
+                        <span class="text-[0.6rem] text-slate-400 font-bold bg-slate-100 px-2 py-0.5 rounded">진급반 / 현재반 / 이름 / 성별 / 점수</span>
                     </div>
                     <textarea id="inputMaster" class="w-full h-40 p-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500 transition leading-relaxed" 
-                        placeholder="예시:&#13;&#10;1 / 홍길동 / 남 / 112.5&#13;&#10;1 / 이영희 / 여 / 205.1&#13;&#10;2 / 김철수 / 남 / 180.0"></textarea>
+                        placeholder="예시:&#13;&#10;1 / 3 / 홍길동 / 남 / 112.5&#13;&#10;1 / 3 / 이영희 / 여 / 205.1&#13;&#10;2 / 4 / 김철수 / 남 / 180.0"></textarea>
                 </div>
 
                 <!-- 2. Fixed Assignment -->
@@ -193,8 +193,9 @@
     <!-- Core Logic -->
     <script>
         class Student {
-            constructor(originalClass, name, gender, score) {
-                this.originalClass = parseInt(originalClass);
+            constructor(draftClass, currentClass, name, gender, score) {
+                this.draftClass = parseInt(draftClass); // 진급예정반
+                this.currentClass = parseInt(currentClass) || 0; // 현재반
                 this.name = name.trim();
                 this.gender = gender.trim() === '여' || gender.toUpperCase() === 'F' ? 'F' : 'M';
                 this.score = parseFloat(score) || 0;
@@ -209,7 +210,7 @@
                 this.id = id;
                 this.members = [];
                 this.fixedClass = null;
-                this.originalClass = null;
+                this.draftClass = null; // Changed from originalClass
                 this.constraints = new Set(); 
                 this.softConstraints = new Set();
             }
@@ -222,9 +223,10 @@
                 }, { M: 0, F: 0 });
             }
             addMember(student) { this.members.push(student); student.teamId = this.id; }
-            resolveOriginalClass() {
-                const classes = this.members.map(m => m.originalClass).filter(c => !isNaN(c) && c > 0);
-                this.originalClass = classes.length > 0 ? classes[0] : null; 
+            resolveDraftClass() {
+                // Determine preferred draft class based on majority/first valid
+                const classes = this.members.map(m => m.draftClass).filter(c => !isNaN(c) && c > 0);
+                this.draftClass = classes.length > 0 ? classes[0] : null; 
             }
         }
 
@@ -251,16 +253,16 @@
             document.getElementById('globalStats').classList.add('hidden');
         }
 
-        // --- NEW: Template Download Function ---
+        // --- Template Download ---
         function downloadTemplate() {
             const wb = XLSX.utils.book_new();
 
             // Sheet 1: Existing Roster
             const ws1Data = [
-                ['진급예정반', '이름', '성별', '점수'], 
-                ['1', '홍길동', '남', '85'],
-                ['1', '이영희', '여', '90'],
-                ['2', '김철수', '남', '88']
+                ['진급예정반', '현재반', '이름', '성별', '점수'], 
+                ['1', '3', '홍길동', '남', '85'],
+                ['1', '3', '이영희', '여', '90'],
+                ['2', '4', '김철수', '남', '88']
             ];
             const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
             XLSX.utils.book_append_sheet(wb, ws1, "기존명단");
@@ -304,7 +306,7 @@
             XLSX.writeFile(wb, "반편성_입력양식.xlsx");
         }
 
-        // --- NEW: Data Import Function ---
+        // --- Data Import ---
         function importData(input) {
             const file = input.files[0];
             if (!file) return;
@@ -314,31 +316,29 @@
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
 
-                // 1. 기존명단 (Sheet 1)
+                // 1. 기존명단 (Sheet 1) - Updated to 5 columns
                 if (workbook.SheetNames.length > 0) {
                     const ws = workbook.Sheets[workbook.SheetNames[0]];
                     const json = XLSX.utils.sheet_to_json(ws, {header: 1});
                     let text = "";
-                    let startRow = 1; // Default
-                    
-                    // Simple heuristic to check if header is row 0
-                    // If row 0 looks like header, start from row 1.
-                    // If not, maybe start from 0? Let's assume standard template usage.
+                    let startRow = 1; 
                     
                     for (let i = startRow; i < json.length; i++) {
                         const row = json[i];
-                        if (row.length >= 2) {
-                            const c = row[0] || "";
-                            const n = row[1] || "";
-                            const g = row[2] || "남";
-                            const s = row[3] || "0";
-                            text += `${c} / ${n} / ${g} / ${s}\n`;
+                        if (row.length >= 3) { // Needs at least Class, Current Class, Name
+                            const nc = row[0] || ""; // New Class (Draft)
+                            const oc = row[1] || ""; // Old/Current Class
+                            const n = row[2] || "";
+                            const g = row[3] || "남";
+                            const s = row[4] || "0";
+                            text += `${nc} / ${oc} / ${n} / ${g} / ${s}\n`;
                         }
                     }
                     document.getElementById('inputMaster').value = text;
                 }
 
-                // 2. 반고정 (Sheet 2)
+                // ... Other sheets logic remains same ...
+                // 2. 반고정
                 if (workbook.SheetNames.length > 1) {
                     const ws = workbook.Sheets[workbook.SheetNames[1]];
                     const json = XLSX.utils.sheet_to_json(ws, {header: 1});
@@ -352,41 +352,33 @@
                     document.getElementById('inputFixed').value = text;
                 }
 
-                // 3. 단짝 (Sheet 3)
+                // 3. 단짝
                 if (workbook.SheetNames.length > 2) {
                     const ws = workbook.Sheets[workbook.SheetNames[2]];
                     const json = XLSX.utils.sheet_to_json(ws, {header: 1});
                     let text = "";
                     for (let i = 1; i < json.length; i++) {
                         const row = json[i];
-                        const names = row.slice(1)
-                            .map(cell => cell == null ? "" : String(cell).trim())
-                            .filter(s => s !== "");
-                        if (names.length > 0) {
-                            text += names.join(', ') + '\n';
-                        }
+                        const names = row.slice(1).map(cell => cell == null ? "" : String(cell).trim()).filter(s => s !== "");
+                        if (names.length > 0) text += names.join(', ') + '\n';
                     }
                     document.getElementById('inputTogether').value = text;
                 }
 
-                // 4. 분리 (Sheet 4)
+                // 4. 분리
                 if (workbook.SheetNames.length > 3) {
                     const ws = workbook.Sheets[workbook.SheetNames[3]];
                     const json = XLSX.utils.sheet_to_json(ws, {header: 1});
                     let text = "";
                     for (let i = 1; i < json.length; i++) {
                         const row = json[i];
-                        const names = row.slice(1)
-                            .map(cell => cell == null ? "" : String(cell).trim())
-                            .filter(s => s !== "");
-                        if (names.length > 0) {
-                            text += names.join(', ') + '\n';
-                        }
+                        const names = row.slice(1).map(cell => cell == null ? "" : String(cell).trim()).filter(s => s !== "");
+                        if (names.length > 0) text += names.join(', ') + '\n';
                     }
                     document.getElementById('inputSeparate').value = text;
                 }
 
-                // 5. 피하기 (Sheet 5)
+                // 5. 피하기
                 if (workbook.SheetNames.length > 4) {
                     const ws = workbook.Sheets[workbook.SheetNames[4]];
                     const json = XLSX.utils.sheet_to_json(ws, {header: 1});
@@ -394,10 +386,8 @@
                     for (let i = 1; i < json.length; i++) {
                         let row = json[i];
                         if (!row || row.length < 2) continue;
-                        
                         const cells = row.slice(1).map(c => (c != null) ? String(c).trim() : "").filter(s => s !== "");
                         if (cells.length === 0) continue;
-
                         const joined = cells.join(', '); 
                         if (joined.includes('//')) {
                             text += joined + '\n';
@@ -433,7 +423,6 @@
             const maxPerClass = parseInt(document.getElementById('maxPerClass').value) || 999;
             const scoreTolerance = parseFloat(document.getElementById('scoreTolerance').value) || 5.0;
             const useRandom = document.getElementById('useRandom').checked;
-            // Get Checkbox State
             const splitRightGroup = document.getElementById('avoidSplitRight').checked;
             
             const rawMaster = document.getElementById('inputMaster').value;
@@ -451,10 +440,16 @@
             masterLines.forEach(line => {
                 if (!line.trim()) return;
                 const parts = line.split('/');
-                if (parts.length < 4) return;
-                const name = parts[1].trim();
+                if (parts.length < 5) return; // Expect 5 parts now
+                
+                const draftClass = parts[0].trim();
+                const currentClass = parts[1].trim();
+                const name = parts[2].trim();
+                const gender = parts[3].trim();
+                const score = parts[4] ? parts[4].trim() : "0";
+
                 if (!allStudents.has(name)) {
-                    allStudents.set(name, new Student(parts[0].trim(), name, parts[2].trim(), parts[3] ? parts[3].trim() : "0"));
+                    allStudents.set(name, new Student(draftClass, currentClass, name, gender, score));
                 }
             });
 
@@ -468,6 +463,7 @@
                 return;
             }
 
+            // Teams
             let tempTeamMap = new Map();
             let nextTeamId = 0;
             const getTeamId = (name) => {
@@ -504,7 +500,7 @@
                 rootToTeamObj.get(rootId).addMember(student);
             });
             allTeams = Array.from(rootToTeamObj.values());
-            allTeams.forEach(t => t.resolveOriginalClass());
+            allTeams.forEach(t => t.resolveDraftClass());
 
             rawFixed.split('\n').forEach(line => {
                 if (!line.includes('/')) return;
@@ -623,7 +619,7 @@
                     
                     const candidates = [...validClasses];
                     candidates.sort((c1, c2) => {
-                        // Gender Balance (Absolute priority for Water Filling)
+                        // 1. Gender Balance (Absolute priority for Water Filling)
                         const mDiff = team.genderCount.M;
                         const fDiff = team.genderCount.F;
                         let c1Load = (mDiff >= fDiff) ? c1.gender.M : c1.gender.F;
@@ -632,14 +628,21 @@
 
                         if (c1Load !== c2Load) return c1Load - c2Load;
                         
-                        // Total Count Secondary
+                        // 2. Total Count Secondary
                         if (c1.count !== c2.count) return c1.count - c2.count;
+
+                        // 3. Soft Constraints (Tertiary: Priority over Original Class)
+                        let p1 = 0, p2 = 0;
+                        c1.teams.forEach(t => { if(team.softConstraints.has(t.id)) p1++; });
+                        c2.teams.forEach(t => { if(team.softConstraints.has(t.id)) p2++; });
+                        if (p1 !== p2) return p1 - p2; // Fewer violations is better
                         
-                        // Randomness
+                        // 4. Randomness (if enabled, and close call)
                         if (useRandom && Math.abs(c1.totalScore - c2.totalScore) < 1) {
                             return Math.random() - 0.5;
                         }
 
+                        // 5. Score
                         return c1.totalScore - c2.totalScore;
                     });
                     
@@ -647,8 +650,8 @@
                     
                     // Smart Retention Check
                     let originalCandidate = null;
-                    if (team.originalClass) {
-                        originalCandidate = validClasses.find(c => c.id === team.originalClass);
+                    if (team.draftClass) { // Check draftClass instead of originalClass
+                        originalCandidate = validClasses.find(c => c.id === team.draftClass);
                     }
 
                     if (originalCandidate) {
@@ -666,6 +669,7 @@
                         const projectedAvg = currentSum / currentCount;
                         const scoreDeviation = Math.abs(projectedAvg - globalAvgScore);
 
+                        // Check soft constraint violation in original class
                         let softViolation = false;
                         originalCandidate.teams.forEach(existing => { if(team.softConstraints.has(existing.id)) softViolation = true; });
 
@@ -689,7 +693,7 @@
 
                 team.members.forEach(m => {
                     m.finalClass = bestClass.id;
-                    if (m.originalClass && m.originalClass !== bestClass.id) movedCount++;
+                    if (m.draftClass && m.draftClass !== bestClass.id) movedCount++;
                 });
                 
                 studentsRemaining -= team.count;
@@ -753,7 +757,7 @@
                     </div>
                     <div class="flex-grow flex flex-wrap content-start">${c.students.map(s => {
                         let badges = '';
-                        if(s.originalClass && s.originalClass !== c.id) badges += `<span class="move-badge">${s.originalClass}→${c.id}</span>`;
+                        if(s.draftClass && s.draftClass !== c.id) badges += `<span class="move-badge">${s.draftClass}→${c.id}</span>`;
                         if(s.fixedClass) badges += '<i class="fas fa-thumbtack fixed-pin mr-1"></i>';
                         return `<span class="student-chip ${s.gender==='M'?'chip-male':'chip-female'}" onclick="highlight('${s.name}')" data-name="${s.name}">${badges} ${s.name} <span class="text-[0.65rem] opacity-60 ml-1">${s.score}</span></span>`;
                     }).join('')}</div>
@@ -789,30 +793,58 @@
 
             const wb = XLSX.utils.book_new();
 
-            // 1. Sheet: Roster (명단)
-            let rosterData = [];
+            // 1. Sheet: 진급반명부 (Sorted by New Class) - Renamed from 반편성명부
+            let rosterNewClass = [];
             finalClasses.forEach(c => {
                 c.students.forEach(s => {
                     let note = [];
-                    if (s.originalClass && s.originalClass !== c.id) note.push(`이동(${s.originalClass}→${c.id})`);
+                    if (s.draftClass && s.draftClass !== c.id) note.push(`이동(${s.draftClass}→${c.id})`);
                     if (s.fixedClass) note.push("고정");
                     
-                    rosterData.push({
-                        "반": c.id,
+                    rosterNewClass.push({
+                        "진급반": c.id,
                         "이름": s.name,
                         "성별": s.gender === 'M' ? '남' : '여',
                         "점수": s.score,
-                        "기존반": s.originalClass || "",
+                        "진급예정반": s.draftClass || "",
+                        "현재반": s.currentClass || "",
                         "비고": note.join(", ")
                     });
                 });
             });
-            // Sort Roster
-            rosterData.sort((a,b) => (a.반 - b.반) || (a.이름.localeCompare(b.이름)));
-            const wsRoster = XLSX.utils.json_to_sheet(rosterData);
-            XLSX.utils.book_append_sheet(wb, wsRoster, "반편성명부");
+            // Sort by New Class then Name
+            rosterNewClass.sort((a,b) => (a.진급반 - b.진급반) || (a.이름.localeCompare(b.이름)));
+            const wsRosterNew = XLSX.utils.json_to_sheet(rosterNewClass);
+            XLSX.utils.book_append_sheet(wb, wsRosterNew, "진급반명부");
 
-            // 2. Sheet: Stats (통계)
+            // 2. Sheet: 현재반명부 (Sorted by Original Class) - NEW
+            let rosterOldClass = [];
+            finalClasses.forEach(c => {
+                c.students.forEach(s => {
+                    let note = [];
+                    if (s.draftClass && s.draftClass !== c.id) note.push("반이동");
+                    if (s.fixedClass) note.push("고정");
+
+                    rosterOldClass.push({
+                        "현재반": s.currentClass || "(미입력)",
+                        "이름": s.name,
+                        "성별": s.gender === 'M' ? '남' : '여',
+                        "점수": s.score,
+                        "진급반": c.id,
+                        "비고": note.join(", ")
+                    });
+                });
+            });
+            // Sort by Original Class then Name
+            rosterOldClass.sort((a,b) => {
+                const classA = parseInt(a.현재반) || 9999;
+                const classB = parseInt(b.현재반) || 9999;
+                return (classA - classB) || (a.이름.localeCompare(b.이름));
+            });
+            const wsRosterOld = XLSX.utils.json_to_sheet(rosterOldClass);
+            XLSX.utils.book_append_sheet(wb, wsRosterOld, "현재반명부");
+
+            // 3. Sheet: Stats (통계)
             let statsData = [];
             let totalS = 0, totalM = 0, totalF = 0, totalCount = 0;
             finalClasses.forEach(c => {
@@ -831,14 +863,14 @@
             const wsStats = XLSX.utils.json_to_sheet(statsData);
             XLSX.utils.book_append_sheet(wb, wsStats, "학급통계");
 
-            // 3. Sheet: Verification (조건검증 - Multi-row Style)
+            // 4. Sheet: Verification (조건검증 - Multi-row Style)
             let verifyData = [];
             
             // Helper to get formatted name trace
             const getTrace = (name) => {
                 const s = allStudents.get(name);
                 if (!s) return `${name}(?)`;
-                return `${name}(${s.originalClass}→${s.finalClass})`;
+                return `${name}(${s.draftClass}→${s.finalClass})`;
             };
 
             // Fixed
@@ -895,7 +927,7 @@
             const wsVerify = XLSX.utils.json_to_sheet(verifyData);
             XLSX.utils.book_append_sheet(wb, wsVerify, "조건검증");
 
-            // 4. Sheet: Summary (반편성요약 - Vertical Style)
+            // 5. Sheet: Summary (반편성요약 - Vertical Style)
             let summaryData = [];
             
             // Header: Classes
