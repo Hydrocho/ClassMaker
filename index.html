@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>학급 편성 도우미 Pro</title>
+    <title>스마트 학급 편성 도우미 Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SheetJS for Excel Export & Import -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -43,7 +43,7 @@
                 <i class="fas fa-file-excel"></i>
             </div>
             <h1 class="text-lg md:text-xl font-bold bg-gradient-to-r from-indigo-700 to-purple-600 bg-clip-text text-transparent whitespace-nowrap">
-                학급 편성 도우미 Pro
+                스마트 학급 편성 도우미 Pro
             </h1>
         </div>
         
@@ -703,12 +703,20 @@
 
             if (failedTeams.length > 0) {
                 const names = failedTeams.map(t => t.members[0].name).slice(0, 3).join(', ');
-                showStatus(`실패: ${names} 외 ${failedTeams.length-1}팀. 조건/인원을 확인하세요.`, 'error');
+                if (showStatus) {
+                    showStatus(`실패: ${names} 외 ${failedTeams.length-1}팀. 조건/인원을 확인하세요.`, 'error');
+                } else {
+                    alert(`실패: ${names} 외 ${failedTeams.length-1}팀. 조건/인원을 확인하세요.`);
+                }
                 return;
             }
 
             renderDashboard(classes, allStudents.size, movedCount, minPerClass, maxPerClass);
-            showStatus(`최적화 완료! 총 ${movedCount}명 이동 (허용오차 내 원반 유지)`, 'success');
+            if (showStatus) {
+                showStatus(`최적화 완료! 총 ${movedCount}명 이동 (허용오차 내 원반 유지)`, 'success');
+            } else {
+                alert(`최적화 완료! 총 ${movedCount}명 이동 (허용오차 내 원반 유지)`);
+            }
         }
 
         function renderDashboard(classes, total, moved, min, max) {
